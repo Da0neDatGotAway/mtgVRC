@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "fluent-ffmpeg": "^2.1.2",
+    "sharp": "^0.32.4"
+  }
+}
