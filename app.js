@@ -1,119 +1,85 @@
 const http = require('http');
-const https = require('https');
-const sharp = require("sharp");
+const https = require('follow-redirects').https;
+const sharp = require('sharp');
 const fs = require('fs');
 const { Readable } = require('stream');
 const ffmpeg = require('fluent-ffmpeg');
-//ffmpeg.setFfmpegPath('C:\\ffmpeg\\bin');
-const { type } = require('os');
 const { randomUUID } = require('crypto');
-/*const transformStream = require('stream')
-const oggstream = new transformStream.Transform()*/
 
-const cardScale = 0.5;
-var processing = false;
+const card = { 'width': 480, 'height': 680, 'scale': 0.5 };
+const compositeSize = {'width': 15, 'height': 15};
+let processing = false;
 
 const server = http.createServer();
 server.on('request', async (request, response) => {
 
-  const { method, url } = request;
-
   console.log("Someone is making a request from the server!");
-  var cards = request.url.substring(1).split("/");
   console.log("request: " + request.url);
 
+  // Array of the requested card names
+  let cards = request.url.substring(1).split("/");
+
+  // Terminate a favicon request TODO: change this to terminate any non-card requests
   if (cards.includes("favicon.ico")) {
-    response.statusCode = 404;
+    response.statusCode = 400;
     response.end();
     return;
   }
-  var j = 0;
-  while (processing) {
-    if (j > 20) {
-      response.statusCode = 404;
-      response.end();
-      return;
-    }
-    await delay(1000);
+
+  // Terminate if still processing after 20 seconds
+  for (let i = 0; processing && i < 20; i++) { await delay(1000); }
+  if (processing) {
+    response.statusCode = 408;
+    response.end();
+    return;
   }
+
   processing = true;
 
-  const width = (480 * cardScale) * 15;
-  const height = (680 * cardScale) * 15;
-  const channels = 3;
-  const rgbPixel = 0x000000;
+  // Create a background to composite on
+  const backgroundRaw = {
+    'width': (card["width"] * card["scale"]) * compositeSize["width"],
+    'height': (card["height"] * card["scale"]) * compositeSize["height"],
+    'channels': 3
+  }
+  const backgroundBuffer = Buffer.alloc(backgroundRaw['width'] * backgroundRaw['height'] * backgroundRaw['channels'], 0x000000);
+  let compositeBackground = await sharp(backgroundBuffer, { raw: backgroundRaw }).png().toBuffer();
 
-  const canvas = Buffer.alloc(width * height * channels, rgbPixel);
+  // Loop cards and composite them on background
+  for (let i = 0; i < cards.length; i++) {
 
-  var sharpImage = await sharp(canvas, { raw: { width, height, channels } }).png().toBuffer();
-
-  for (var i = 0; i < cards.length; i++) {
-
-    let cardimageurl = await new Promise((resolve, reject) => {
-      https.get(`https://api.scryfall.com/cards/named?exact=${cards[i]}&format=image&version=border_crop`, resp => {
-        let data = '';
-
-        console.log('reading from get', data.length, resp.headers['x-scryfall-card-image'])
-
-        // A chunk of data has been received.
-        resp.on('data', (chunk) => {
-          data += chunk;
-        });
-
-        // The whole response has been received. Print out the result.
-        resp.on('end', () => {
-          console.log('read from get', data.length, resp.headers['x-scryfall-card-image'])
-
-          resolve(resp.headers['x-scryfall-card-image'])
-        });
-      })
-    })
-
-    //console.log("CardImageURL", cardimageurl);
-    if (cardimageurl == undefined) {
-      console.log("Incorrect file type given!");
-      response.statusCode = 206;
-      response.end();
-      return;
-    }
-
-    let imagebuffer = await new Promise(resolve => {
-      https.get(cardimageurl, respo => {
-        var bufs = [];
-        respo.on('data', function (d) { bufs.push(d); });
-        respo.on('end', () => {
-          var buf = Buffer.concat(bufs);
-          console.log("Download Completed");
-          resolve(buf);
+    // Get the card from scryfall to a buffer
+    let cardBuffer = await new Promise(resolve => {
+      https.get(`https://api.scryfall.com/cards/named?exact=${cards[i]}&format=image&version=border_crop`, res => {
+        const chunks = [];
+        res.on('data', chunk => { chunks.push(chunk); })
+        res.on('end', () => {
+          resolve(Buffer.concat(chunks));
         })
-      })
+      }).end();
     })
 
-    curCard = await sharp(imagebuffer).resize({ width: 480 * cardScale, kernel: sharp.kernel.cubic }).toBuffer();
+    // Scale the card
+    cardBuffer = await sharp(cardBuffer).resize({ width: card["width"] * card["scale"], kernel: sharp.kernel.cubic }).toBuffer();
 
-    sharpImage = await sharp(sharpImage).composite([
-      {
-        input: curCard,
-        top: (i % 15) * 680 * cardScale,
-        left: (Math.floor(i / 15)) * 480 * cardScale,
-      },
-    ]).png().toBuffer();
-    console.log("x: ", Math.floor(i / 15), "y: ", (i % 15));
+    // Composite the card
+    compositeBackground = await sharp(compositeBackground).composite([{
+        input: cardBuffer,
+        top: (i % compositeSize["height"]) * card["height"] * card["scale"],
+        left: (Math.floor(i / compositeSize["width"])) * card["width"] * card["scale"],
+      }]).png().toBuffer();
+    console.log("x: ", Math.floor(i / compositeSize["width"]), "y: ", (i % compositeSize["height"]));
 
-    //delay unless this was the last card
-    if (i < cards.length - 1) {
-      await delay(100);
+    // delay a second every 10 cards because of scryfall politely asking
+    if (i % 10 === 0) {
+      await delay(1000);
     }
   }
-  //await sharp(sharpImage).toFile("sucks.png");
-
-  //  fs.writeFileSync(path.resolve(output, `${i}.${ext}`), imageStream)
-
 
   var fileNameInt = randomUUID();
   var secondFileNameInt = randomUUID();
 
-  const stream = Readable.from(sharpImage);
+  const stream = Readable.from(compositeBackground);
 
   videoProcessor = ffmpeg().outputOptions([
     "-preset slow",
@@ -179,144 +145,6 @@ server.on('request', async (request, response) => {
 
 console.log("starting host at: http://localhost:8080");
 
-/*oggstream._transform = function (data, encoding, done) {
-  this.push(data)
-  done()
-}*/
-
 function delay(time) {
   return new Promise(resolve => setTimeout(resolve, time))
 }
-/*const http = require('http');
-const https = require('https');
-const sharp = require("sharp");
-const fs = require('fs');
-const { type } = require('os');
-
-const cardScale = 0.5;
-
-const server = http.createServer();
-server.on('request', (request, response) => {
-  // the same kind of magic happens here!
-  const { method, url } = request;
-
-  console.log("Someone is making a request from the server!");
-  var cards = request.url.substring(1).split("/");
-  console.log("request: "+request.url);
-  if(!request.url.includes("app.js"))
-  {
-    if(!request.url.includes(".mp4"))
-    {
-      const width = (480*cardScale)*15;
-      const height = (680*cardScale)*15;
-      const channels = 3;
-      const rgbPixel = 0x000000;
-      
-      const canvas = Buffer.alloc(width * height * channels, rgbPixel);
-      var magicText;
-      
-      var image = sharp(canvas, { raw : { width, height, channels } });
-
-      addCardImageLoop(0,image,cards);
-    }
-  }
-}).listen(8080);
-
-function addCardImageLoop(i, image, cards)
-{
-  setTimeout(function() {
-    console.log("curCard: "+cards[i]);
-
-    downloadImage(i,image,cards);
-
-  }, 1000);
-}
-
-async function imageManipulation(i, image, cards) {
-  curCard = await sharp("tempFile.jpg").resize({width:480*cardScale,kernel:sharp.kernel.cubic}).toBuffer();
-  
-  var x = image;
-  console.log(Object.prototype.toString.call(image));
-
-  await image.composite([
-    {
-      input: curCard,
-      top: (i%15)*680*cardScale,
-      left: (Math.floor(i/15))*480*cardScale,
-    },
-  ]);
-  console.log("x: ", Math.floor(i/15), "y: ", (i%15));
-  if((i>cards.length-1))
-  {
-    await image.toFile("sucks.png");
-  }
-  return image;
-}
-
-function downloadImage(i,image,cards)
-{//${cards[i]}
-   https.get(`https://api.scryfall.com/cards/named?exact=lightning_bolt&format=image&version=border_crop`, resp => {
-    let data = '';
-
-    // A chunk of data has been received.
-    resp.on('data', (chunk) => {
-      data += chunk;
-    });
-
-    // The whole response has been received. Print out the result.
-    resp.on('end', () => {
-      //console.log("Removed Json", resp.headers['x-scryfall-card-image']);
-
-      const file = fs.createWriteStream("tempFile.jpg");
-      https.get(resp.headers['x-scryfall-card-image'], respo => {
-        respo.pipe(file);
-    
-        file.on("finish", async () => {
-
-          file.close();
-          console.log("Download Completed");
-          image = await imageManipulation(i,image,cards);
-          i++;
-          if(i<cards.length)
-          {
-            addCardImageLoop(i,image,cards);
-          }
-
-        });
-      });
-
-    });
-
-  });
-}
-
-console.log("starting host at: http://localhost:8080");
-
-/*function downloadImage()
-{//${cards[i]}
-   https.get(`https://api.scryfall.com/cards/named?exact=lightning_bolt&format=image&version=border_crop`, resp => {
-    let data = '';
-
-    // A chunk of data has been received.
-    resp.on('data', (chunk) => {
-      data += chunk;
-    });
-
-    // The whole response has been received. Print out the result.
-    resp.on('end', () => {
-      console.log("Before File");
-      
-      const file = fs.createWriteStream("tempFile.jpg");
-      https.get(resp.headers['x-scryfall-card-image'], respo => {
-        console.log("Respo:::", respo);
-        respo.pipe(file);
-    
-        file.on("finish", () => {
-          file.close();
-          console.log("Download Completed");
-        });
-      });
-    });
-
-  });
-}*/
