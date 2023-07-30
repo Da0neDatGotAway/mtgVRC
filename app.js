@@ -1,3 +1,4 @@
+const followRedirects = require('follow-redirects');
 const http = require('http');
 const https = require('follow-redirects').https;
 const sharp = require('sharp');
@@ -7,8 +8,11 @@ const ffmpeg = require('fluent-ffmpeg');
 const { randomUUID } = require('crypto');
 
 const card = { 'width': 480, 'height': 680, 'scale': 0.5 };
-const compositeSize = {'width': 15, 'height': 15};
+const compositeSize = { 'width': 15, 'height': 15 };
 let processing = false;
+let storedRequest = [];
+
+followRedirects.maxRedirects = 2;
 
 const server = http.createServer();
 server.on('request', async (request, response) => {
@@ -17,7 +21,23 @@ server.on('request', async (request, response) => {
   console.log("request: " + request.url);
 
   // Array of the requested card names
-  let cards = request.url.substring(1).split("/");
+  let tempCards = request.url.substring(1).split("%0A");
+
+  //I know it's dumb, but there may be whitespace at the end to remove and this was the first thing I though of
+  let cardsRealSize = 0;
+  for (let i = 0; i < tempCards.length; i++) {
+    if (tempCards[i] != "") {
+      cardsRealSize++;
+    }
+  }
+  let cards = new Array(cardsRealSize);
+  let cardIndex = 0;
+  for (let i = 0; i < cardsRealSize; i++) {
+    if (tempCards[i] != "") {
+      cards[cardIndex] = tempCards[i];
+      cardIndex++;
+    }
+  }
 
   // Terminate a favicon request TODO: change this to terminate any non-card requests
   if (cards.includes("favicon.ico")) {
@@ -27,11 +47,45 @@ server.on('request', async (request, response) => {
   }
 
   // Terminate if still processing after 20 seconds
-  for (let i = 0; processing && i < 20; i++) { await delay(1000); }
+  for (let i = 0; processing && i < 20; i++) {
+    let index = storedRequest.indexOf(request.url);
+    if (index > -1) {
+      response.writeHead(200, { 'Content-Type': 'video/mp4' })
+
+      const videoStream = fs.createReadStream(storedRequest[index-1]);
+      videoStream.pipe(response);
+      
+      console.log("sent stored image");
+
+      await delay(50);
+
+      response.end();
+      return;
+    }
+
+    await delay(1000);
+  }
   if (processing) {
     response.statusCode = 408;
     response.end();
     return;
+  }
+  else
+  {
+    const index = storedRequest.indexOf(request.url);
+    if (index > -1) {
+      response.writeHead(200, { 'Content-Type': 'video/mp4' })
+
+      const videoStream = fs.createReadStream(storedRequest[index-1]);
+      videoStream.pipe(response);
+
+      console.log("sent stored image");
+      
+      await delay(50);
+
+      response.end();
+      return;
+    }
   }
 
   processing = true;
@@ -48,9 +102,17 @@ server.on('request', async (request, response) => {
   // Loop cards and composite them on background
   for (let i = 0; i < cards.length; i++) {
 
+    let newCards = "";
+    for (let j = 0; j < cards[i].length; j++) {
+      if (cards[i][j] === '%') {
+        newCards = cards[i].substring(j + 3);
+        j = cards[i].length;
+      }
+    }
+    console.log(newCards);
     // Get the card from scryfall to a buffer
     let cardBuffer = await new Promise(resolve => {
-      https.get(`https://api.scryfall.com/cards/named?exact=${cards[i]}&format=image&version=border_crop`, res => {
+      https.get(`https://api.scryfall.com/cards/named?exact=${newCards}&format=image&version=border_crop`, res => {
         const chunks = [];
         res.on('data', chunk => { chunks.push(chunk); })
         res.on('end', () => {
@@ -60,19 +122,28 @@ server.on('request', async (request, response) => {
     })
 
     // Scale the card
-    cardBuffer = await sharp(cardBuffer).resize({ width: card["width"] * card["scale"], kernel: sharp.kernel.cubic }).toBuffer();
+    try{
+      cardBuffer = await sharp(cardBuffer).resize({ width: card["width"] * card["scale"], kernel: sharp.kernel.cubic }).toBuffer();
+    }
+    catch(error)
+    {
+      console.log("Buffer image failed, throwing 404: " + error);
+      response.statusCode = 404;
+      response.end();
+      return;
+    }
 
     // Composite the card
     compositeBackground = await sharp(compositeBackground).composite([{
-        input: cardBuffer,
-        top: (i % compositeSize["height"]) * card["height"] * card["scale"],
-        left: (Math.floor(i / compositeSize["width"])) * card["width"] * card["scale"],
-      }]).png().toBuffer();
+      input: cardBuffer,
+      top: (i % compositeSize["height"]) * card["height"] * card["scale"],
+      left: (Math.floor(i / compositeSize["width"])) * card["width"] * card["scale"],
+    }]).png().toBuffer();
     console.log("x: ", Math.floor(i / compositeSize["width"]), "y: ", (i % compositeSize["height"]));
 
     // delay a second every 10 cards because of scryfall politely asking
-    if (i % 10 === 0) {
-      await delay(1000);
+    if (i < cards.length - 1) {
+      await delay(100);
     }
   }
 
@@ -101,14 +172,14 @@ server.on('request', async (request, response) => {
       .on('end', resolve)
       .run()
   });
-  
+
   await new Promise((resolve) => {
     ffmpeg()
-    .input(`temp/${secondFileNameInt}.mp4`)
-    .outputOptions('-vf tpad=stop_mode=clone:stop_duration=2')
-    .output(`temp/${fileNameInt}.mp4`)
-    .on('end', resolve)
-    .run();
+      .input(`temp/${secondFileNameInt}.mp4`)
+      .outputOptions('-vf tpad=stop_mode=clone:stop_duration=2')
+      .output(`temp/${fileNameInt}.mp4`)
+      .on('end', resolve)
+      .run();
   });
 
   try {
@@ -127,15 +198,9 @@ server.on('request', async (request, response) => {
   videoStream.pipe(response);
 
   //could not figure out how to tell if the videostream was done, so instead I just have a hardcoded delay
-  await delay(2000);
+  storeAndDelete(`temp/${fileNameInt}.mp4`, request.url);
 
-  try {
-    fs.unlinkSync(`temp/${fileNameInt}.mp4`);
-
-    console.log("Delete Temp video File");
-  } catch (error) {
-    console.log(error);
-  }
+  await delay(50);
 
   processing = false;
 
@@ -147,4 +212,22 @@ console.log("starting host at: http://localhost:8080");
 
 function delay(time) {
   return new Promise(resolve => setTimeout(resolve, time))
+}
+
+async function storeAndDelete(fileName, URLcall) {
+  storedRequest.push(fileName)
+  storedRequest.push(URLcall)
+  console.log("storing processed URL for 10sec");
+  await delay(10000)
+  try {
+    fs.unlinkSync(fileName);
+
+    console.log("Delete Temp video File");
+  } catch (error) {
+    console.log(error);
+  }
+  const index = storedRequest.indexOf(fileName);
+  if (index > -1) {
+    storedRequest.splice(index, 2);
+  }
 }
