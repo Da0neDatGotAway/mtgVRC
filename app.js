@@ -182,13 +182,13 @@ server.on('request', async (request, response) => {
       .run();
   });
 
-  try {
+  /*try {
     fs.unlinkSync(`temp/${secondFileNameInt}.mp4`);
 
     console.log("Delete Temp Temp video File");
   } catch (error) {
     console.log(error);
-  }
+  }*/
 
   console.log("Hopefully processed the video, catching errors is for losers!");
   //200 or 206 not sure which
