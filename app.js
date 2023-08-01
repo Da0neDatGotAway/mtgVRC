@@ -164,6 +164,8 @@ server.on('request', async (request, response) => {
 
   //   ,
 
+  console.log("beforeVideos");
+  
   await new Promise((resolve) => {
     videoProcessor.input(stream)
       .noAudio()
@@ -172,6 +174,8 @@ server.on('request', async (request, response) => {
       .on('end', resolve)
       .run()
   });
+
+  console.log("afterFirstVideo");
 
   await new Promise((resolve) => {
     ffmpeg()
@@ -182,6 +186,10 @@ server.on('request', async (request, response) => {
       .run();
   });
 
+  console.log("afterSecondVideo");
+
+  await delay(100);
+  
   try {
     fs.unlinkSync(`temp/${secondFileNameInt}.mp4`);
 
