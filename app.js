@@ -176,6 +176,7 @@ server.on('request', async (request, response) => {
   });
 
   console.log("afterFirstVideo");
+  await delay(100);
 
   await new Promise((resolve) => {
     ffmpeg()
