@@ -164,33 +164,43 @@ server.on('request', async (request, response) => {
 
   //   ,
 
-  console.log("beforeVideos");
-  
   await new Promise((resolve) => {
     videoProcessor.input(stream)
       .noAudio()
       .output(`temp/${secondFileNameInt}.mp4`)
-      .outputFPS(30)
+      .outputFPS(1)
       .on('end', resolve)
       .run()
   });
 
-  console.log("afterFirstVideo");
-  await delay(100);
+  //[0]trim=0:N[hold];[0][hold]concat[extended];[extended][0]overlay
+  //[0:a]showfreqs=s=200x100:colors=white|white,format=yuv420p[vid]
 
   await new Promise((resolve) => {
     ffmpeg()
       .input(`temp/${secondFileNameInt}.mp4`)
-      .outputOptions('-filter_complex "[0]trim=0:N[hold];[0][hold]concat[extended];[extended][0]overlay"')
+      .complexFilter([
+        {
+          filter: "trim",
+          options:  "0:20",
+          inputs: "[0]",
+          outputs: "[hold]"
+        },
+        {
+          filter: "concat",
+          inputs: "[0][hold]",
+          outputs: "[extended]"
+        },
+        {
+          filter: "overlay",
+          inputs: "[extended][0]"
+        },
+      ])
       .output(`temp/${fileNameInt}.mp4`)
       .on('end', resolve)
       .run();
   });
 
-  console.log("afterSecondVideo");
-
-  await delay(100);
-  
   try {
     fs.unlinkSync(`temp/${secondFileNameInt}.mp4`);
 
@@ -199,16 +209,10 @@ server.on('request', async (request, response) => {
     console.log(error);
   }
 
-  //test await
-  await delay(50);
-  
   console.log("Hopefully processed the video, catching errors is for losers!");
   //200 or 206 not sure which
   response.writeHead(200, { 'Content-Type': 'video/mp4' })
 
-  //test await
-  await delay(50);
-  
   const videoStream = fs.createReadStream(`temp/${fileNameInt}.mp4`);
   videoStream.pipe(response);
 
