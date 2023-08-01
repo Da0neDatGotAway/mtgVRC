@@ -181,7 +181,7 @@ server.on('request', async (request, response) => {
   await new Promise((resolve) => {
     ffmpeg()
       .input(`temp/${secondFileNameInt}.mp4`)
-      .outputOptions('-vf tpad=stop_mode=clone:stop_duration=2')
+      .outputOptions('-filter_complex "[0]trim=0:N[hold];[0][hold]concat[extended];[extended][0]overlay"')
       .output(`temp/${fileNameInt}.mp4`)
       .on('end', resolve)
       .run();
