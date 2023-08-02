@@ -212,7 +212,7 @@ server.on('request', async (request, response) => {
   console.log("Hopefully processed the video, catching errors is for losers!");
   //200 or 206 not sure which
   response.writeHead(200, { 'Content-Type': 'video/mp4' })
-
+  await delay(100);
   const videoStream = fs.createReadStream(`temp/${fileNameInt}.mp4`);
   videoStream.pipe(response);
 
@@ -240,7 +240,7 @@ async function storeAndDelete(fileName, URLcall) {
   await delay(10000)
   try {
     fs.unlinkSync(fileName);
-
+    
     console.log("Delete Temp video File");
   } catch (error) {
     console.log(error);
