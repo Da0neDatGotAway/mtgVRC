@@ -167,7 +167,7 @@ server.on('request', async (request, response) => {
   await new Promise((resolve) => {
     videoProcessor.input(stream)
       .noAudio()
-      .output(`temp/${secondFileNameInt}.mp4`)
+      .output(`temp/${fileNameInt}.mp4`)
       .outputFPS(1)
       .on('end', resolve)
       .run()
@@ -176,7 +176,7 @@ server.on('request', async (request, response) => {
   //[0]trim=0:N[hold];[0][hold]concat[extended];[extended][0]overlay
   //[0:a]showfreqs=s=200x100:colors=white|white,format=yuv420p[vid]
 
-  await new Promise((resolve) => {
+  /*await new Promise((resolve) => {
     ffmpeg()
       .input(`temp/${secondFileNameInt}.mp4`)
       .complexFilter([
@@ -207,7 +207,7 @@ server.on('request', async (request, response) => {
     console.log("Delete Temp Temp video File");
   } catch (error) {
     console.log(error);
-  }
+  }*/
 
   console.log("Hopefully processed the video, catching errors is for losers!");
   //200 or 206 not sure which
