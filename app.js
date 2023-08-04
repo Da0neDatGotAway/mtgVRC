@@ -62,9 +62,6 @@ server.on('request', async (request, response) => {
 
       console.log("sent stored image");
 
-      await delay(50);
-
-      response.end();
       return;
     }
 
@@ -78,16 +75,17 @@ server.on('request', async (request, response) => {
   else {
     const index = storedRequest.indexOf(request.url);
     if (index > -1) {
-      response.writeHead(200, { 'Content-Type': 'video/mp4' })
+      response.writeHead(200, {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET',
+        'Content-Type': 'video/mp4'
+      })
 
       const videoStream = fs.createReadStream(storedRequest[index - 1]);
       videoStream.pipe(response);
 
       console.log("sent stored image");
 
-      await delay(50);
-
-      response.end();
       return;
     }
   }
@@ -225,11 +223,7 @@ server.on('request', async (request, response) => {
   //could not figure out how to tell if the videostream was done, so instead I just have a hardcoded delay
   storeAndDelete(`temp/${fileNameInt}.mp4`, request.url);
 
-  await delay(50);
-
   processing = false;
-
-  response.end();
 
 }).listen(8080);
 
