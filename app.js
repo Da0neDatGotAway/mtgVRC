@@ -47,8 +47,8 @@ server.on('request', async (request, response) => {
     return;
   }
 
-  // Terminate if still processing after 20 seconds
-  for (let i = 0; processing && i < 20; i++) {
+  // Terminate if still processing after 60 seconds
+  for (let i = 0; processing && i < 60; i++) {
     let index = storedRequest.indexOf(request.url);
     if (index > -1) {
       response.writeHead(200, {
