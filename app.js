@@ -15,6 +15,17 @@ let storedRequest = [];
 followRedirects.maxRedirects = 2;
 
 const server = http.createServer();
+
+var allowCrossDomain = function(req, res, next) {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+
+  next();
+}
+
+server.use(allowCrossDomain);
+
 server.on('request', async (request, response) => {
 
   console.log("Someone is making a request from the server!");
@@ -238,13 +249,13 @@ async function storeAndDelete(fileName, URLcall) {
   storedRequest.push(URLcall)
   console.log("storing processed URL for 10sec");
   await delay(10000)
-  /*try {
+  try {
     fs.unlinkSync(fileName);
     
     console.log("Delete Temp video File");
   } catch (error) {
     console.log(error);
-  }*/
+  }
   const index = storedRequest.indexOf(fileName);
   if (index > -1) {
     storedRequest.splice(index, 2);
