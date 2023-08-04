@@ -131,6 +131,9 @@ server.on('request', async (request, response) => {
       console.log("Buffer image failed, throwing 404: " + error);
       response.statusCode = 404;
       response.end();
+
+      processing = false;
+      
       return;
     }
 
