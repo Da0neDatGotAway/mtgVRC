@@ -16,7 +16,7 @@ followRedirects.maxRedirects = 2;
 
 const server = http.createServer();
 
-var allowCrossDomain = function(req, res, next) {
+var allowCrossDomain = function (req, res, next) {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET');
   res.header('Access-Control-Allow-Headers', 'Content-Type');
@@ -63,9 +63,9 @@ server.on('request', async (request, response) => {
     if (index > -1) {
       response.writeHead(200, { 'Content-Type': 'video/mp4' })
 
-      const videoStream = fs.createReadStream(storedRequest[index-1]);
+      const videoStream = fs.createReadStream(storedRequest[index - 1]);
       videoStream.pipe(response);
-      
+
       console.log("sent stored image");
 
       await delay(50);
@@ -81,17 +81,16 @@ server.on('request', async (request, response) => {
     response.end();
     return;
   }
-  else
-  {
+  else {
     const index = storedRequest.indexOf(request.url);
     if (index > -1) {
       response.writeHead(200, { 'Content-Type': 'video/mp4' })
 
-      const videoStream = fs.createReadStream(storedRequest[index-1]);
+      const videoStream = fs.createReadStream(storedRequest[index - 1]);
       videoStream.pipe(response);
 
       console.log("sent stored image");
-      
+
       await delay(50);
 
       response.end();
@@ -133,11 +132,10 @@ server.on('request', async (request, response) => {
     })
 
     // Scale the card
-    try{
+    try {
       cardBuffer = await sharp(cardBuffer).resize({ width: card["width"] * card["scale"], kernel: sharp.kernel.cubic }).toBuffer();
     }
-    catch(error)
-    {
+    catch (error) {
       console.log("Buffer image failed, throwing 404: " + error);
       response.statusCode = 404;
       response.end();
@@ -193,7 +191,7 @@ server.on('request', async (request, response) => {
       .complexFilter([
         {
           filter: "trim",
-          options:  "0:20",
+          options: "0:20",
           inputs: "[0]",
           outputs: "[hold]"
         },
@@ -222,8 +220,11 @@ server.on('request', async (request, response) => {
 
   console.log("Hopefully processed the video, catching errors is for losers!");
   //200 or 206 not sure which
-  response.writeHead(200, { 'Content-Type': 'video/mp4' })
-  await delay(100);
+  response.writeHead(200, {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET',
+    'Content-Type': 'video/mp4'
+  })
   const videoStream = fs.createReadStream(`temp/${fileNameInt}.mp4`);
   videoStream.pipe(response);
 
@@ -251,7 +252,7 @@ async function storeAndDelete(fileName, URLcall) {
   await delay(10000)
   try {
     fs.unlinkSync(fileName);
-    
+
     console.log("Delete Temp video File");
   } catch (error) {
     console.log(error);
