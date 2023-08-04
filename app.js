@@ -51,7 +51,11 @@ server.on('request', async (request, response) => {
   for (let i = 0; processing && i < 20; i++) {
     let index = storedRequest.indexOf(request.url);
     if (index > -1) {
-      response.writeHead(200, { 'Content-Type': 'video/mp4' })
+      response.writeHead(200, {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET',
+        'Content-Type': 'video/mp4'
+      })
 
       const videoStream = fs.createReadStream(storedRequest[index - 1]);
       videoStream.pipe(response);
