@@ -42,7 +42,7 @@ server.on('request', async (request, response) => {
 
   // Terminate a favicon request TODO: change this to terminate any non-card requests
   if (cards.includes("favicon.ico")) {
-    response.statusCode = 400;
+    response.statusCode = 401;
     response.end();
     return;
   }
@@ -68,7 +68,7 @@ server.on('request', async (request, response) => {
     await delay(1000);
   }
   if (processing) {
-    response.statusCode = 408;
+    response.statusCode = 401;
     response.end();
     return;
   }
@@ -128,8 +128,8 @@ server.on('request', async (request, response) => {
       cardBuffer = await sharp(cardBuffer).resize({ width: card["width"] * card["scale"], kernel: sharp.kernel.cubic }).toBuffer();
     }
     catch (error) {
-      console.log("Buffer image failed, throwing 404: " + error);
-      response.statusCode = 404;
+      console.log("Buffer image failed, throwing 401: " + error);
+      response.statusCode = 401;
       response.end();
 
       processing = false;
