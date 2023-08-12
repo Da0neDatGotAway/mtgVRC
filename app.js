@@ -1,6 +1,6 @@
-const followRedirects = require('follow-redirects');
+//const followRedirects = require('follow-redirects');
 const http = require('http');
-const https = require('follow-redirects').https;
+const https = require('https');
 const sharp = require('sharp');
 const fs = require('fs');
 const { Readable } = require('stream');
@@ -12,7 +12,7 @@ const compositeSize = { 'width': 15, 'height': 15 };
 let processing = false;
 let storedRequest = [];
 
-followRedirects.maxRedirects = 2;
+//followRedirects.maxRedirects = 2;
 
 const server = http.createServer();
 
@@ -113,8 +113,27 @@ server.on('request', async (request, response) => {
     }
     console.log(newCards);
     // Get the card from scryfall to a buffer
-    let cardBuffer = await new Promise(resolve => {
+    //${newCards}
+    let cardLink = await new Promise(resolve => {
       https.get(`https://api.scryfall.com/cards/named?exact=${newCards}&format=image&version=border_crop`, res => {
+        const chunks = [];
+        res.on('data', chunk => { chunks.push(chunk); })
+        res.on('end', () => {
+          resolve(res.headers['x-scryfall-card-image'])
+        })
+      }).end();
+    })
+
+    if (cardLink == undefined) {
+      console.log("Incorrect card name given!");
+      response.statusCode = 401;
+      response.end();
+      processing = false;
+      return;
+    }
+
+    let cardBuffer = await new Promise(resolve => {
+      https.get(cardLink, res => {
         const chunks = [];
         res.on('data', chunk => { chunks.push(chunk); })
         res.on('end', () => {
@@ -122,6 +141,8 @@ server.on('request', async (request, response) => {
         })
       }).end();
     })
+
+    
 
     // Scale the card
     try {
